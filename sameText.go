@@ -25,7 +25,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	controlOut <- api.Signal{Action: "Join", Name: "sameText"}
 	db := make(map[string]map[string]int)
 
 	for {
@@ -55,6 +54,8 @@ func main() {
 				summary <- result
 			case api.Quit:
 				return
+			case api.WakeUp:
+				controlOut <- api.Signal{Action: "Join", Name: "sameText"}
 			}
 		}
 		/**/

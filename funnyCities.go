@@ -50,7 +50,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	controlOut <- api.Signal{Action: "Join", Name: "funnyCities"}
 	businessCitiesDB := make(map[string]string)
 	funnyBusinessDB := make(map[string]int)
 	for {
@@ -78,6 +77,8 @@ func main() {
 				summary <- result
 			case api.Quit:
 				return
+			case api.WakeUp:
+				controlOut <- api.Signal{Action: "Join", Name: "funnyCities"}
 			}
 		}
 	}

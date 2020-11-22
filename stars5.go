@@ -27,7 +27,6 @@ func main() {
 	}
 
 	db := make(map[string]map[float64]int)
-	controlOut <- api.Signal{Action: "Join", Name: "stars5"}
 	for {
 		select {
 		case bulk := <-input:
@@ -55,6 +54,8 @@ func main() {
 				summary <- result
 			case api.Quit:
 				return
+			case api.WakeUp:
+				controlOut <- api.Signal{Action: "Join", Name: "stars5"}
 			}
 		}
 	}

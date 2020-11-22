@@ -1,7 +1,6 @@
 package pipe
 
 import (
-	"errors"
 	"io"
 	"log"
 	"os"
@@ -79,6 +78,24 @@ func ConsumeWith(exchange, queue, routingKey string,
 	return ch, nil
 }
 
+type Consumer func(interface{}) error
+
+func ConsumeAsGob(exchange,
+	queue,
+	routingKey string,
+	consumer Consumer) (*amqp.Channel, error) {
+	return ConsumeWith(exchange,
+		queue,
+		routingKey,
+		func(bytes []byte) error {
+			data, err := encoding.GobDecoder(bytes)
+			if err != nil {
+				return err
+			}
+			return consumer(data)
+		})
+}
+
 type Worker func(consumer BytesConsumer)
 
 func Publish(threads int,
@@ -116,6 +133,27 @@ func Publish(threads int,
 		ch.Close()
 	})
 	return nil
+}
+
+type GobWorker func(Consumer)
+
+func PublishGob(
+	threads int,
+	exchangeName string,
+	routingKey string,
+	worker GobWorker) error {
+	return Publish(threads,
+		exchangeName,
+		routingKey,
+		func(byteconsumer BytesConsumer) {
+			worker(func(data interface{}) error {
+				bytes, err := encoding.GobEncoder(data)
+				if err != nil {
+					log.Fatal(err)
+				}
+				return byteconsumer(bytes)
+			})
+		})
 }
 
 type StringPipe struct {
@@ -161,31 +199,23 @@ func NewStringArrayPipe(exchange, queue string) StringArrayPipe {
 	return StringArrayPipe{
 		In: func() (<-chan []string, io.Closer, error) {
 			data := make(chan []string)
-			ch, err := ConsumeWith(exchange,
+			ch, err := ConsumeAsGob(exchange,
 				queue,
 				exchange,
-				func(bytes []byte) error {
-					t, err := encoding.GobDecoder(bytes)
-					if err != nil {
-						log.Fatal(err)
-					}
+				func(t interface{}) error {
 					data <- t.([]string)
-					return err
+					return nil
 				})
 			return data, ch, err
 		},
 		Out: func() (chan<- []string, error) {
 			data := make(chan []string)
-			err := Publish(2,
+			err := PublishGob(2,
 				exchange,
 				exchange,
-				func(consumer BytesConsumer) {
+				func(consumer Consumer) {
 					for i := range data {
-						bytes, err := encoding.GobEncoder(i)
-						if err != nil {
-							log.Fatal(err)
-						}
-						consumer(bytes)
+						consumer(i)
 					}
 				})
 			return data, err
@@ -206,31 +236,23 @@ var Dates = struct {
 }{
 	In: func() (<-chan []time.Time, io.Closer, error) {
 		data := make(chan []time.Time)
-		ch, err := ConsumeWith(ReviewDates,
+		ch, err := ConsumeAsGob(ReviewDates,
 			ReviewDates,
 			ReviewDates,
-			func(bytes []byte) error {
-				t, err := encoding.GobDecoder(bytes)
-				if err != nil {
-					log.Fatal(err)
-				}
+			func(t interface{}) error {
 				data <- t.([]time.Time)
-				return err
+				return nil
 			})
 		return data, ch, err
 	},
 	Out: func() (chan<- []time.Time, error) {
 		data := make(chan []time.Time)
-		err := Publish(2,
+		err := PublishGob(2,
 			ReviewDates,
 			ReviewDates,
-			func(consumer BytesConsumer) {
+			func(consumer Consumer) {
 				for i := range data {
-					bytes, err := encoding.GobEncoder(i)
-					if err != nil {
-						log.Fatal(err)
-					}
-					consumer(bytes)
+					consumer(i)
 				}
 			})
 		return data, err
@@ -245,31 +267,23 @@ var UserStars = struct {
 }{
 	In: func() (<-chan []api.UserStars, io.Closer, error) {
 		data := make(chan []api.UserStars)
-		ch, err := ConsumeWith(ReviewUserStars,
+		ch, err := ConsumeAsGob(ReviewUserStars,
 			ReviewUserStars,
 			ReviewUserStars,
-			func(bytes []byte) error {
-				t, err := encoding.GobDecoder(bytes)
-				if err != nil {
-					log.Fatal(err)
-				}
+			func(t interface{}) error {
 				data <- t.([]api.UserStars)
-				return err
+				return nil
 			})
 		return data, ch, err
 	},
 	Out: func() (chan<- []api.UserStars, error) {
 		data := make(chan []api.UserStars)
-		err := Publish(2,
+		err := PublishGob(2,
 			ReviewUserStars,
 			ReviewUserStars,
-			func(consumer BytesConsumer) {
+			func(consumer Consumer) {
 				for i := range data {
-					bytes, err := encoding.GobEncoder(i)
-					if err != nil {
-						log.Fatal(err)
-					}
-					consumer(bytes)
+					consumer(i)
 				}
 			})
 		return data, err
@@ -284,31 +298,23 @@ var BusinessText = struct {
 }{
 	In: func() (<-chan []api.BusinessText, io.Closer, error) {
 		data := make(chan []api.BusinessText)
-		ch, err := ConsumeWith(ReviewBusinessTexts,
+		ch, err := ConsumeAsGob(ReviewBusinessTexts,
 			ReviewBusinessTexts,
 			ReviewBusinessTexts,
-			func(bytes []byte) error {
-				t, err := encoding.GobDecoder(bytes)
-				if err != nil {
-					log.Fatal(err)
-				}
+			func(t interface{}) error {
 				data <- t.([]api.BusinessText)
-				return err
+				return nil
 			})
 		return data, ch, err
 	},
 	Out: func() (chan<- []api.BusinessText, error) {
 		data := make(chan []api.BusinessText)
-		err := Publish(2,
+		err := PublishGob(2,
 			ReviewBusinessTexts,
 			ReviewBusinessTexts,
-			func(consumer BytesConsumer) {
+			func(consumer Consumer) {
 				for i := range data {
-					bytes, err := encoding.GobEncoder(i)
-					if err != nil {
-						log.Fatal(err)
-					}
-					consumer(bytes)
+					consumer(i)
 				}
 			})
 		return data, err
@@ -323,14 +329,10 @@ var UserText = struct {
 }{
 	In: func() (<-chan []api.UserText, io.Closer, error) {
 		data := make(chan []api.UserText)
-		ch, err := ConsumeWith(ReviewUserTexts,
+		ch, err := ConsumeAsGob(ReviewUserTexts,
 			ReviewUserTexts,
 			ReviewUserTexts,
-			func(bytes []byte) error {
-				t, err := encoding.GobDecoder(bytes)
-				if err != nil {
-					log.Fatal(err)
-				}
+			func(t interface{}) error {
 				data <- t.([]api.UserText)
 				return nil
 			})
@@ -338,16 +340,12 @@ var UserText = struct {
 	},
 	Out: func() (chan<- []api.UserText, error) {
 		data := make(chan []api.UserText)
-		err := Publish(2,
+		err := PublishGob(2,
 			ReviewUserTexts,
 			ReviewUserTexts,
-			func(consumer BytesConsumer) {
+			func(consumer Consumer) {
 				for i := range data {
-					bytes, err := encoding.GobEncoder(i)
-					if err != nil {
-						log.Fatal(err)
-					}
-					consumer(bytes)
+					consumer(i)
 				}
 			})
 		return data, err
@@ -363,31 +361,23 @@ func NewCounterPipe(name string, queueName string) CounterPipe {
 	return CounterPipe{
 		In: func() (<-chan map[string]int, io.Closer, error) {
 			data := make(chan map[string]int)
-			ch, err := ConsumeWith(name,
+			ch, err := ConsumeAsGob(name,
 				queueName,
 				name,
-				func(bytes []byte) error {
-					t, err := encoding.GobDecoder(bytes)
-					if err != nil {
-						log.Fatal(err)
-					}
+				func(t interface{}) error {
 					data <- t.(map[string]int)
-					return err
+					return nil
 				})
 			return data, ch, err
 		},
 		Out: func() (chan<- map[string]int, error) {
 			data := make(chan map[string]int)
-			err := Publish(2,
+			err := PublishGob(2,
 				name,
 				name,
-				func(consumer BytesConsumer) {
+				func(consumer Consumer) {
 					for i := range data {
-						bytes, err := encoding.GobEncoder(i)
-						if err != nil {
-							log.Fatal(err)
-						}
-						consumer(bytes)
+						consumer(i)
 					}
 				})
 			return data, err
@@ -409,31 +399,23 @@ var SummaryTop10FunnyCities = struct {
 }{
 	In: func() (<-chan []api.StringInt, io.Closer, error) {
 		data := make(chan []api.StringInt)
-		ch, err := ConsumeWith(Top10FunnyCities,
+		ch, err := ConsumeAsGob(Top10FunnyCities,
 			Top10FunnyCities,
 			Top10FunnyCities,
-			func(bytes []byte) error {
-				t, err := encoding.GobDecoder(bytes)
-				if err != nil {
-					log.Fatal(err)
-				}
+			func(t interface{}) error {
 				data <- t.([]api.StringInt)
-				return err
+				return nil
 			})
 		return data, ch, err
 	},
 	Out: func() (chan<- []api.StringInt, error) {
 		data := make(chan []api.StringInt)
-		err := Publish(2,
+		err := PublishGob(2,
 			Top10FunnyCities,
 			Top10FunnyCities,
-			func(consumer BytesConsumer) {
+			func(consumer Consumer) {
 				for i := range data {
-					bytes, err := encoding.GobEncoder(i)
-					if err != nil {
-						log.Fatal(err)
-					}
-					consumer(bytes)
+					consumer(i)
 				}
 			})
 		return data, err
@@ -454,71 +436,27 @@ type ControlPipe struct {
 var Control = ControlPipe{
 	In: func() (<-chan api.Signal, io.Closer, error) {
 		data := make(chan api.Signal)
-		ch, err := ConsumeWith(control,
+		ch, err := ConsumeAsGob(control,
 			"",
 			control,
-			func(bytes []byte) error {
-				t, err := encoding.GobDecoder(bytes)
-				if err != nil {
-					log.Fatal(err)
-				}
+			func(t interface{}) error {
 				data <- t.(api.Signal)
-				return err
+				return nil
 			})
 		return data, ch, err
 	},
 	Out: func() (chan<- api.Signal, error) {
 		data := make(chan api.Signal)
-		err := Publish(2,
+		err := PublishGob(2,
 			control,
 			control,
-			func(consumer BytesConsumer) {
+			func(consumer Consumer) {
 				for i := range data {
-					bytes, err := encoding.GobEncoder(i)
-					if err != nil {
-						log.Fatal(err)
-					}
-					consumer(bytes)
+					consumer(i)
 				}
 			})
 		return data, err
 	},
-}
-
-func RegisterAndListen(name string, listener func(api.Signal) error) {
-	controlIn, cClose, err := Control.In()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer cClose.Close()
-	controlOut, err := Control.Out()
-	if err != nil {
-		log.Fatal(err)
-	}
-	controlOut <- api.Signal{Action: "join", Name: name}
-	for signal := range controlIn {
-		if listener(signal) != nil {
-			break
-		}
-	}
-}
-
-var QUIT = errors.New("QUIT")
-
-func RegisterAndWait(name string,
-	shutdown func() error,
-	emit func()) {
-	RegisterAndListen(name, func(signal api.Signal) error {
-		switch signal {
-		case api.Quit:
-			err := shutdown()
-			log.Println("Close", err)
-			return QUIT
-		case api.Emit:
-			emit()
-		}
-		return nil
-	})
 }
 
 func rabbitUrl() string {

@@ -91,17 +91,44 @@ func ReportWorker(report *Report, wg *sync.WaitGroup) func() error {
 	}
 }
 
-func main() {
-	var wg sync.WaitGroup
-	report := Report{
-		Histogram:          make(map[string]int),
-		Reviews50FiveStars: []string{},
-		Reviews5SameText:   []string{},
-		Reviews50Plus:      make(map[string]int),
-		Top10Funniest:      []api.StringInt{},
+type Services struct {
+	sync.Mutex
+	Services map[string]bool
+}
+
+func (s *Services) Enabled() bool {
+	s.Lock()
+	defer s.Unlock()
+	for _, service := range []string{"parser",
+		"reviewsCounter",
+		"fiftyPlusReviews",
+		"fiveReviewsSameText",
+		"fiftyReviewsFiveStars",
+		"histogram",
+		"stars5",
+		"funnyCities",
+		"top10FunniestCities",
+		"sameText"} {
+		if enabled, ok := s.Services[service]; !ok || !enabled {
+			return false
+		}
 	}
-	closer := ReportWorker(&report, &wg)
-	control, err := pipe.Control.Out()
+	return true
+}
+
+func (s *Services) Status(name string, enabled bool) {
+	s.Lock()
+	defer s.Unlock()
+	s.Services[name] = enabled
+}
+
+func main() {
+	controlIn, cCloser, err := pipe.Control.In()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cCloser.Close()
+	controlOut, err := pipe.Control.Out()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -115,10 +142,35 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var wg sync.WaitGroup
+	report := Report{
+		Histogram:          make(map[string]int),
+		Reviews50FiveStars: []string{},
+		Reviews5SameText:   []string{},
+		Reviews50Plus:      make(map[string]int),
+		Top10Funniest:      []api.StringInt{},
+	}
+
+	closer := ReportWorker(&report, &wg)
+	defer closer()
+
+	services := &Services{Services: make(map[string]bool)}
 	go func() {
 		wg.Add(1)
 		defer wg.Done()
-		pipe.RegisterAndWait("parser", closer, func() {})
+		controlOut <- api.WakeUp
+	loop:
+		for signal := range controlIn {
+			log.Println(signal)
+			switch signal.Action {
+			case "Quit":
+				break loop
+			case "Join":
+				services.Status(signal.Name, true)
+			case "Leave":
+				services.Status(signal.Name, false)
+			}
+		}
 	}()
 
 	http.HandleFunc("/business", func(res http.ResponseWriter, req *http.Request) {
@@ -142,7 +194,12 @@ func main() {
 	})
 
 	http.HandleFunc("/report", func(res http.ResponseWriter, req *http.Request) {
-		control <- api.Emit
+		if !services.Enabled() {
+			controlOut <- api.WakeUp
+			fmt.Fprintln(res, "Services not enabled")
+			return
+		}
+		controlOut <- api.Emit
 		res.Header().Add("Content-Type", "application/json")
 		encoder := json.NewEncoder(res)
 		encoder.SetIndent("", "\t")
@@ -151,11 +208,11 @@ func main() {
 	})
 
 	http.HandleFunc("/quit", func(res http.ResponseWriter, req *http.Request) {
-		control <- api.Quit
+		controlOut <- api.Quit
 		fmt.Fprintln(res, "")
+
 	})
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
-
 	wg.Wait()
 }

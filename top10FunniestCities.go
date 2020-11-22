@@ -38,7 +38,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	controlOut <- api.Signal{Action: "Join", Name: "top10FunniestCities"}
 	db := []api.StringInt{}
 	for {
 		select {
@@ -50,6 +49,8 @@ func main() {
 				summary <- db
 			case api.Quit:
 				return
+			case api.WakeUp:
+				controlOut <- api.Signal{Action: "Join", Name: "top10FunniestCities"}
 			}
 		}
 	}

@@ -26,7 +26,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	controlOut <- api.Signal{Action: "Join", Name: "fiftyPlusReviews"}
 	db := make(map[string]int)
 	for {
 		select {
@@ -43,6 +42,8 @@ func main() {
 				summary <- utils.CopyN(db, 20)
 			case api.Quit:
 				return
+			case api.WakeUp:
+				controlOut <- api.Signal{Action: "Join", Name: "fiftyPlusReviews"}
 			}
 		}
 	}

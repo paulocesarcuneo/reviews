@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"log"
 	"reviews/api"
 	"reviews/pipe"
@@ -28,7 +27,7 @@ func ParseReview(data string) []api.Review {
 	return result
 }
 
-func ParseWorkers(threads int, wg *sync.WaitGroup) io.Closer {
+func main() {
 	reviews, rClose, err := pipe.ReviewSource.In()
 	if err != nil {
 		log.Fatal(err)
@@ -58,25 +57,40 @@ func ParseWorkers(threads int, wg *sync.WaitGroup) io.Closer {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	controlIn, ccloser, err := pipe.Control.In()
+	if err != nil {
+		log.Fatal(err)
+	}
+	controlOut, err := pipe.Control.Out()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("ok")
+	var wg sync.WaitGroup
+	threads := 4
+	wg.Add(threads)
 	utils.Pool(threads, func() {
-		wg.Add(1)
 		defer wg.Done()
-		for bulk := range reviews {
-			reviews := ParseReview(bulk)
-			users <- api.MapUsers(reviews)
-			dates <- api.MapDate(reviews)
-			stars <- api.MapUserStars(reviews)
-			text <- api.MapUserText(reviews)
-			business <- api.MapBusinessText(reviews)
+		defer rClose.Close()
+		defer ccloser.Close()
+		for {
+			select {
+			case bulk := <-reviews:
+				reviews := ParseReview(bulk)
+				users <- api.MapUsers(reviews)
+				dates <- api.MapDate(reviews)
+				stars <- api.MapUserStars(reviews)
+				text <- api.MapUserText(reviews)
+				business <- api.MapBusinessText(reviews)
+			case signal := <-controlIn:
+				switch signal {
+				case api.Quit:
+					return
+				case api.WakeUp:
+					controlOut <- api.Signal{Action: "Join", Name: "parser"}
+				}
+			}
 		}
 	})
-	return rClose
-}
-
-func main() {
-	var wg sync.WaitGroup
-	worker := ParseWorkers(4, &wg)
-	pipe.RegisterAndWait("parser", worker.Close, func() {})
 	wg.Wait()
 }

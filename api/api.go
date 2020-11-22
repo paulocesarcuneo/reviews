@@ -108,6 +108,7 @@ type Signal struct {
 
 var Quit = Signal{Action: "quit"}
 var Emit = Signal{Action: "emit"}
+var WakeUp = Signal{Action: "WakeUp"}
 
 const Five = 5.0
 

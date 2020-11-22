@@ -32,7 +32,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	controlOut <- api.Signal{Action: "Join", Name: "fiveReviewsSameText"}
 	fivePlusReviews := make(map[string]int)
 	sameTextCounter := make(map[string]int)
 	for {
@@ -59,6 +58,8 @@ func main() {
 				summary <- result
 			case api.Quit:
 				return
+			case api.WakeUp:
+				controlOut <- api.Signal{Action: "Join", Name: "fiveReviewsSameText"}
 			}
 		}
 	}
