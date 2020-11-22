@@ -1,0 +1,108 @@
+version: "3.8"
+services:
+  rabbit:
+    image: rabbitmq:management-alpine
+    ports:
+      - 5672:5672
+      - 15672:15672
+  report:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    ports:
+      - 8080:8080
+    build:
+      context: .
+    command: ./report
+  fiftyPlusReviews:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./fiftyPlusReviews
+  fiftyReviewsFiveStars:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./fiftyReviewsFiveStars
+  fiveReviewsSameText:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./fiveReviewsSameText
+  funnyCities:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./funnyCities
+  histogram:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./histogram
+  parser:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./parser
+  reviewCounter:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./reviewCounter
+  sameText:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./sameText
+  stars5:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./stars5
+  top10FunniestCities:
+    environment:
+      RABBIT_URL: "amqp://guest:guest@rabbit:5672/"
+    depends_on:
+      - rabbit
+    image: reviews
+    build:
+      context: .
+    command: ./top10FunniestCities
