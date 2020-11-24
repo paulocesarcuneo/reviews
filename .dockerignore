@@ -1,2 +1,4 @@
+*/*.json.zip
 *.json.zip
 .git
+data/
