@@ -17,9 +17,6 @@ RUN go build sameText.go
 RUN go build stars5.go
 RUN go build top10FunniestCities.go
 RUN go build feeder.go
-RUN mkdir /go/data
-RUN touch /go/data/yelp_academic_dataset_business.json.zip
-RUN touch /go/data/yelp_academic_dataset_review.json.zip
 
 
 

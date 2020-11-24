@@ -87,8 +87,8 @@ func main() {
 	var wg sync.WaitGroup
 	linesChan := make(chan Request)
 	spawnFeeders(16, wg, linesChan)
-	postZipFile("data/yelp_academic_dataset_business.json.zip", "business", linesChan, chunksize)
-	postZipFile("data/yelp_academic_dataset_review.json.zip", "reviews", linesChan, chunksize)
+	postZipFile("yelp_academic_dataset_business.json.zip", "business", linesChan, chunksize)
+	postZipFile("yelp_academic_dataset_review.json.zip", "reviews", linesChan, chunksize)
 	close(linesChan)
 	wg.Wait()
 }
