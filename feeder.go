@@ -20,7 +20,7 @@ type Request struct {
 	Data    string
 }
 
-const HOST = "http://localhost:8080/"
+const HOST = "http://report:8080/"
 
 func spawnFeeders(
 	threads int,
