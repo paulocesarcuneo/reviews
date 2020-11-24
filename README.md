@@ -29,5 +29,6 @@ y lanza un contendor de docker que carga el sistema.
 Si se invoca sin parametros, busca los archivos en :
 "$(pwd)/yelp_academic_dataset_business.json.zip"
 "$(pwd)/yelp_academic_dataset_review.json.zip"
+y usa la network "reviews_default"
 
 Durante la carga de datos o al final, se puede refrescar el reporte en el browser para ver los estados intermedios del reporte.
