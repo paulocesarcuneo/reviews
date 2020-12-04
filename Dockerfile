@@ -5,7 +5,7 @@ WORKDIR /go
 COPY . .
 RUN mkdir -p /go/lib
 ENV GOPATH /go/lib
-RUN go build report.go
+RUN go build server.go
 RUN go build fiftyPlusReviews.go
 RUN go build fiftyReviewsFiveStars.go
 RUN go build fiveReviewsSameText.go
