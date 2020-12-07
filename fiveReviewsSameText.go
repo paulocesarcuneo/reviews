@@ -6,6 +6,16 @@ import (
 	"reviews/pipe"
 )
 
+func merge5ReviewsSameText(sameTextCounter, fivePlusReviews map[string]int) []string {
+	result := []string{}
+	for sameTextUser, _ := range sameTextCounter {
+		if _, ok := fivePlusReviews[sameTextUser]; ok {
+			result = append(result, sameTextUser)
+		}
+	}
+	return result
+}
+
 func main() {
 	controlIn, cCloser, err := pipe.Control.In()
 	if err != nil {
@@ -34,28 +44,47 @@ func main() {
 
 	fivePlusReviews := make(map[string]int)
 	sameTextCounter := make(map[string]int)
+	end := 2
+loop:
 	for {
 		select {
-		case bulk := <-reviewCounter:
-			log.Println("updating review count")
+		case bulk, ok := <-reviewCounter:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
 			for user, count := range bulk {
 				if count > 5 {
 					fivePlusReviews[user] = count
 				}
 			}
-		case bulk := <-sameText:
-			log.Println("updating same text")
-			sameTextCounter = bulk
-		case signal := <-controlIn:
+			if len(bulk) == 0 {
+				end--
+			}
+			summary <- merge5ReviewsSameText(sameTextCounter, fivePlusReviews)
+			if end == 0 {
+				break loop
+			}
+		case bulk, ok := <-sameText:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
+			if len(bulk) != 0 {
+				sameTextCounter = bulk
+			} else {
+				end--
+			}
+			summary <- merge5ReviewsSameText(sameTextCounter, fivePlusReviews)
+			if end == 0 {
+				break loop
+			}
+		case signal, ok := <-controlIn:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
 			switch signal {
-			case api.Emit:
-				result := []string{}
-				for sameTextUser, _ := range sameTextCounter {
-					if _, ok := fivePlusReviews[sameTextUser]; ok {
-						result = append(result, sameTextUser)
-					}
-				}
-				summary <- result
 			case api.Quit:
 				return
 			case api.WakeUp:
@@ -63,4 +92,6 @@ func main() {
 			}
 		}
 	}
+	summary <- []string{}
+	log.Println("EOF")
 }

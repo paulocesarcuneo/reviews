@@ -27,25 +27,38 @@ func main() {
 		log.Fatal(err)
 	}
 	db := make(map[string]int)
+loop:
 	for {
 		select {
-		case userCount := <-input:
-			log.Println("updating")
+		case userCount, ok := <-input:
 			for user, count := range userCount {
 				if count > 50 {
 					db[user] = count
 				}
 			}
-		case signal := <-controlIn:
+			if len(db) != 0 || len(userCount) == 0 {
+				summary <- utils.Copy(db)
+			}
+			if len(userCount) == 0 {
+				break loop
+			}
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
+		case signal, ok := <-controlIn:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
 			switch signal {
-			case api.Emit:
-				summary <- utils.CopyN(db, 20)
 			case api.Quit:
-				return
+				break loop
 			case api.WakeUp:
 				controlOut <- api.Signal{Action: "Join", Name: "fiftyPlusReviews"}
 			}
 		}
 	}
-
+	log.Println("EOF")
+	summary <- map[string]int{}
 }

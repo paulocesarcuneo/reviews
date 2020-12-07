@@ -23,9 +23,9 @@ echo "using  $BIS_FILE $REVIEW_FILE"
 docker run -it \
     --network="$NETWORK" \
     -v "$BIS_FILE:/go/yelp_academic_dataset_business.json.zip" \
-    reviews ./feeder 100 business yelp_academic_dataset_business.json.zip
+    reviews ./feeder 50 business yelp_academic_dataset_business.json.zip
 
 docker run -it \
     --network="$NETWORK" \
     -v "$REVIEW_FILE:/go/yelp_academic_dataset_review.json.zip" \
-    reviews ./feeder 100 reviews yelp_academic_dataset_review.json.zip
+    reviews ./feeder 50 reviews yelp_academic_dataset_review.json.zip

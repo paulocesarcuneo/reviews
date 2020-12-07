@@ -34,7 +34,7 @@ func httpClient() *http.Client {
 
 func spawnFeeders(
 	threads int,
-	wg sync.WaitGroup,
+	wg *sync.WaitGroup,
 	lines chan Request) {
 	utils.Pool(threads, func() {
 		wg.Add(1)
@@ -60,6 +60,11 @@ func spawnFeeders(
 				resp.Body.Close()
 				return nil, nil
 			})
+			if len(request.Data) == 0 {
+				log.Println("Done Sending Data")
+				close(lines)
+				return
+			}
 		}
 	})
 }
@@ -100,10 +105,7 @@ func main() {
 	}
 	var wg sync.WaitGroup
 	linesChan := make(chan Request)
-	spawnFeeders(16, wg, linesChan)
+	spawnFeeders(16, &wg, linesChan)
 	postZipFile(file, service, linesChan, chunksize)
-	//	postZipFile("yelp_academic_dataset_business.json.zip", "business", linesChan, chunksize)
-	//  postZipFile("yelp_academic_dataset_review.json.zip", "reviews", linesChan, chunksize)
-	close(linesChan)
 	wg.Wait()
 }

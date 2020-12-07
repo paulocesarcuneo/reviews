@@ -28,17 +28,33 @@ func main() {
 	}
 
 	db := make(map[string]int)
+	eventCounter := 0
+loop:
 	for {
 		select {
-		case bulk := <-input:
+		case bulk, ok := <-input:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
+			eventCounter++
 			for _, user := range bulk {
 				count := db[user]
 				db[user] = count + 1
 			}
-		case signal := <-controlIn:
-			switch signal {
-			case api.Emit:
+			if (eventCounter%api.SUMMARY_BULK_SIZE == 0 && len(db) != 0) || (len(bulk) == 0) {
+				log.Println(eventCounter)
 				summary <- utils.Copy(db)
+			}
+			if len(bulk) == 0 {
+				break loop
+			}
+		case signal, ok := <-controlIn:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
+			switch signal {
 			case api.Quit:
 				return
 			case api.WakeUp:
@@ -46,4 +62,6 @@ func main() {
 			}
 		}
 	}
+	summary <- map[string]int{}
+	log.Println("EOF")
 }

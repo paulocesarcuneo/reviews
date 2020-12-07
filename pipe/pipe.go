@@ -60,7 +60,9 @@ func Consume(
 
 type BytesConsumer func([]byte) error
 
-func ConsumeWith(exchange, queue, routingKey string,
+func ConsumeWith(exchange,
+	queue,
+	routingKey string,
 	consumer BytesConsumer) (*amqp.Channel, error) {
 	ch, err := Conn.Channel()
 	if err != nil {

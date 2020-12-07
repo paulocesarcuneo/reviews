@@ -68,12 +68,19 @@ func main() {
 	var wg sync.WaitGroup
 	threads := 4
 	wg.Add(threads)
+	done := make(chan int, 1)
 	utils.Pool(threads, func() {
 		defer wg.Done()
 		defer rClose.Close()
 		defer ccloser.Close()
 		for {
 			select {
+			case count := <-done:
+				log.Println("done")
+				if count > 0 {
+					done <- (count - 1)
+				}
+				return
 			case bulk := <-reviews:
 				reviews := ParseReview(bulk)
 				users <- api.MapUsers(reviews)
@@ -87,7 +94,6 @@ func main() {
 					// como la queue de rabbit es unica no deberia haber una race condition
 					log.Println("Reviews EOF Reached")
 					controlOut <- api.ReviewsEOF
-					return
 				}
 			case signal := <-controlIn:
 				switch signal {
@@ -95,6 +101,7 @@ func main() {
 					controlOut <- api.Signal{Action: "Join", Name: "parser"}
 				case api.ReviewsEOF:
 					log.Println("Done Parsing Reviews")
+					done <- (threads - 1)
 					return
 				}
 			}

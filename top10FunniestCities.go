@@ -39,19 +39,34 @@ func main() {
 		log.Fatal(err)
 	}
 	db := []api.StringInt{}
+loop:
 	for {
 		select {
-		case bulk := <-input:
-			db = top10(bulk)
-		case signal := <-controlIn:
+		case bulk, ok := <-input:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
+			if len(bulk) != 0 {
+				db = top10(bulk)
+			}
+			summary <- db
+			if len(bulk) == 0 {
+				break loop
+			}
+		case signal, ok := <-controlIn:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
 			switch signal {
-			case api.Emit:
-				summary <- db
 			case api.Quit:
-				return
+				break loop
 			case api.WakeUp:
 				controlOut <- api.Signal{Action: "Join", Name: "top10FunniestCities"}
 			}
 		}
 	}
+	summary <- []api.StringInt{}
+	log.Println("EOF")
 }

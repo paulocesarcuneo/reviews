@@ -24,6 +24,15 @@ func ParseBusiness(data string) []api.Business {
 	}
 	return result
 }
+func updateCities(funnyBusinessDB map[string]int, businessCitiesDB map[string]string) map[string]int {
+	result := make(map[string]int)
+	for business, count := range funnyBusinessDB {
+		if city, ok := businessCitiesDB[business]; ok {
+			result[city] = count + result[city]
+		}
+	}
+	return result
+}
 
 func main() {
 	controlIn, cCloser, err := pipe.Control.In()
@@ -52,38 +61,61 @@ func main() {
 
 	businessCitiesDB := make(map[string]string)
 	funnyBusinessDB := make(map[string]int)
+	end := 2
+	eventCounter := 0
+loop:
 	for {
 		select {
-		case bulk := <-business:
-			for _, business := range ParseBusiness(bulk) {
-				businessCitiesDB[business.Business_id] = business.City
+		case bulk, ok := <-business:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
 			}
+			businessBulk := ParseBusiness(bulk)
 			if len(bulk) == 0 {
 				log.Println("Done Loading Business")
 				controlOut <- api.BusinessEOF
+				end--
+			} else {
+				for _, business := range businessBulk {
+					businessCitiesDB[business.Business_id] = business.City
+				}
 			}
-		case bulk := <-businessText:
+		case bulk, ok := <-businessText:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
+			eventCounter++
 			for _, business := range bulk {
 				if strings.Contains(business.Text, "funny") {
 					count := funnyBusinessDB[business.Business]
 					funnyBusinessDB[business.Business] = count + 1
 				}
 			}
-		case signal := <-controlIn:
+			if len(bulk) == 0 {
+				end--
+			}
+			if (eventCounter%api.SUMMARY_BULK_SIZE == 0 && len(funnyBusinessDB) != 0) || end == 0 {
+				log.Println(eventCounter)
+				summary <- updateCities(funnyBusinessDB, businessCitiesDB)
+			}
+			if end == 0 {
+				break loop
+			}
+		case signal, ok := <-controlIn:
+			if !ok {
+				log.Println("Broken chan")
+				break loop
+			}
 			switch signal {
-			case api.Emit:
-				result := make(map[string]int)
-				for business, count := range funnyBusinessDB {
-					if city, ok := businessCitiesDB[business]; ok {
-						result[city] = count + result[city]
-					}
-				}
-				summary <- result
 			case api.Quit:
-				return
+				break loop
 			case api.WakeUp:
 				controlOut <- api.Signal{Action: "Join", Name: "funnyCities"}
 			}
 		}
 	}
+	summary <- map[string]int{}
+	log.Println("EOF")
 }

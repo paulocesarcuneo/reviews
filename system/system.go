@@ -83,7 +83,7 @@ func (s *Services) Start(wg *sync.WaitGroup) {
 		defer wg.Done()
 		for s.State == Initializing {
 			s.controlOut <- api.WakeUp
-			time.Sleep(time.Duration(4) * time.Second)
+			time.Sleep(time.Duration(2) * time.Second)
 		}
 		log.Println("Initialization Done")
 	}()

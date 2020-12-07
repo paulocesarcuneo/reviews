@@ -4,6 +4,7 @@ import (
 	"log"
 	"reviews/api"
 	"reviews/pipe"
+	"reviews/utils"
 	"sync"
 )
 
@@ -31,7 +32,9 @@ func LaunchReportWorker(wg *sync.WaitGroup) (*Report, func() error) {
 		wg.Add(1)
 		defer wg.Done()
 		for stars := range fifty50Stars5 {
-			report.Reviews50FiveStars = stars
+			if len(stars) != 0 {
+				report.Reviews50FiveStars = stars
+			}
 		}
 	}()
 
@@ -44,7 +47,9 @@ func LaunchReportWorker(wg *sync.WaitGroup) (*Report, func() error) {
 		wg.Add(1)
 		defer wg.Done()
 		for same := range fiveSameText {
-			report.Reviews5SameText = same
+			if len(same) != 0 {
+				report.Reviews5SameText = same
+			}
 		}
 	}()
 
@@ -56,7 +61,9 @@ func LaunchReportWorker(wg *sync.WaitGroup) (*Report, func() error) {
 		wg.Add(1)
 		defer wg.Done()
 		for fifty := range fiftyPlus {
-			report.Reviews50Plus = fifty
+			if len(fifty) != 0 {
+				report.Reviews50Plus = utils.CopyN(fifty, 100)
+			}
 		}
 	}()
 
@@ -68,7 +75,9 @@ func LaunchReportWorker(wg *sync.WaitGroup) (*Report, func() error) {
 		wg.Add(1)
 		defer wg.Done()
 		for histo := range histogram {
-			report.Histogram = histo
+			if len(histo) != 0 {
+				report.Histogram = histo
+			}
 		}
 	}()
 
@@ -80,7 +89,9 @@ func LaunchReportWorker(wg *sync.WaitGroup) (*Report, func() error) {
 		wg.Add(1)
 		defer wg.Done()
 		for city := range top10Cities {
-			report.Top10Funniest = city
+			if len(city) != 0 {
+				report.Top10Funniest = city
+			}
 		}
 	}()
 

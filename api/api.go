@@ -4,6 +4,8 @@ import (
 	"crypto/md5"
 	"encoding/gob"
 	"encoding/hex"
+	"os"
+	"strconv"
 	"time"
 )
 
@@ -26,7 +28,7 @@ func ParseDate(s string) time.Time {
 }
 
 func MapUsers(reviews []Review) []string {
-	var result []string
+	result := []string{}
 	for _, r := range reviews {
 		result = append(result, r.User_id)
 	}
@@ -34,7 +36,7 @@ func MapUsers(reviews []Review) []string {
 }
 
 func MapDate(reviews []Review) []time.Time {
-	var result []time.Time
+	result := []time.Time{}
 	for _, r := range reviews {
 		result = append(result, ParseDate(r.Date))
 	}
@@ -57,7 +59,7 @@ func MD5Hash(text string) string {
 }
 
 func MapBusinessText(reviews []Review) []BusinessText {
-	var result []BusinessText
+	result := []BusinessText{}
 	for _, r := range reviews {
 		result = append(result, BusinessText{Business: r.Business_id, Text: r.Text})
 	}
@@ -70,7 +72,7 @@ type UserStars struct {
 }
 
 func MapUserStars(reviews []Review) []UserStars {
-	var result []UserStars
+	result := []UserStars{}
 	for _, r := range reviews {
 		result = append(result, UserStars{User: r.User_id, Stars: r.Stars})
 	}
@@ -83,7 +85,7 @@ type UserText struct {
 }
 
 func MapUserText(reviews []Review) []UserText {
-	var result []UserText
+	result := []UserText{}
 	for _, r := range reviews {
 		result = append(result, UserText{User: r.User_id, Text: MD5Hash(r.Text)})
 	}
@@ -120,7 +122,14 @@ var BusinessEOF = EOF("Business")
 
 const Five = 5.0
 
+var SUMMARY_BULK_SIZE int
+
 func init() {
+	size, err := strconv.Atoi(os.Getenv("SUMMARY_BULK_SIZE"))
+	SUMMARY_BULK_SIZE = 2500
+	if err == nil {
+		SUMMARY_BULK_SIZE = size
+	}
 	gob.Register(Review{})
 	gob.Register([]Review{})
 	gob.Register(Business{})
