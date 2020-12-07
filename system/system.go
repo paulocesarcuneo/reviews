@@ -5,16 +5,38 @@ import (
 	"reviews/api"
 	"reviews/pipe"
 	"sync"
+	"time"
 )
 
 type Services struct {
 	sync.Mutex
-	Services   map[string]bool
+	Services   map[string]int
 	controlIn  <-chan api.Signal
 	controlOut chan<- api.Signal
 	Close      func() error
+	State      string
 }
 
+const Initializing = "initializing"
+const BusinessReady = "business-ready"
+const ReviewsReady = "reviews-ready"
+
+var KnownServices = []string{"parser",
+	"reviewsCounter",
+	"fiftyPlusReviews",
+	"fiveReviewsSameText",
+	"fiftyReviewsFiveStars",
+	"histogram",
+	"stars5",
+	"funnyCities",
+	"top10FunniestCities",
+	"sameText"}
+
+/*
+
+init -> business-ready -> review ready -> done
+
+*/
 func NewService() (*Services, error) {
 	controlIn, cCloser, err := pipe.Control.In()
 	if err != nil {
@@ -25,55 +47,69 @@ func NewService() (*Services, error) {
 		return nil, err
 	}
 	return &Services{
-		Services:   make(map[string]bool),
+		Services:   make(map[string]int),
 		controlIn:  controlIn,
 		controlOut: controlOut,
 		Close: func() error {
 			return cCloser.Close()
 		},
+		State: Initializing,
 	}, nil
 }
 
-func (s *Services) Enabled() bool {
-	s.Lock()
-	defer s.Unlock()
-	for _, service := range []string{"parser",
-		"reviewsCounter",
-		"fiftyPlusReviews",
-		"fiveReviewsSameText",
-		"fiftyReviewsFiveStars",
-		"histogram",
-		"stars5",
-		"funnyCities",
-		"top10FunniestCities",
-		"sameText"} {
-		if enabled, ok := s.Services[service]; !ok || !enabled {
+func (s *Services) servicesReady() bool {
+	for _, service := range KnownServices {
+		if count, ok := s.Services[service]; !ok || count <= 0 {
 			return false
 		}
 	}
 	return true
 }
 
-func (s *Services) Status(name string, enabled bool) {
+func (s *Services) inc(name string) {
 	s.Lock()
 	defer s.Unlock()
-	s.Services[name] = enabled
-}
-
-func (s *Services) Start() {
-	s.controlOut <- api.WakeUp
-loop:
-	for signal := range s.controlIn {
-		log.Println(signal)
-		switch signal.Action {
-		case "Quit":
-			break loop
-		case "Join":
-			s.Status(signal.Name, true)
-		case "Leave":
-			s.Status(signal.Name, false)
+	s.Services[name] = s.Services[name] + 1
+	if s.servicesReady() {
+		if s.State == Initializing {
+			s.State = BusinessReady
 		}
 	}
+}
+
+func (s *Services) Start(wg *sync.WaitGroup) {
+	go func() {
+		wg.Add(1)
+		defer wg.Done()
+		for s.State == Initializing {
+			s.controlOut <- api.WakeUp
+			time.Sleep(time.Duration(4) * time.Second)
+		}
+		log.Println("Initialization Done")
+	}()
+}
+
+func (s *Services) Listen(wg *sync.WaitGroup) {
+	go func() {
+		wg.Add(1)
+		defer wg.Done()
+	loop:
+		for signal := range s.controlIn {
+			switch signal {
+			case api.Quit:
+				break loop
+			case api.BusinessEOF:
+				log.Println("Accepting Reviews Now")
+				s.State = ReviewsReady
+			default:
+				switch signal.Action {
+				case "Join":
+					s.inc(signal.Name)
+				}
+			}
+			log.Println(signal)
+		}
+	}()
 }
 
 func (s *Services) Send(signal api.Signal) {

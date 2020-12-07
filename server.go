@@ -27,45 +27,57 @@ func main() {
 	report, rCloser := report.LaunchReportWorker(&wg)
 	defer rCloser()
 
-	services := &system.Services{Services: make(map[string]bool)}
-	go func() {
-		wg.Add(1)
-		defer wg.Done()
-		services.Start()
-	}()
+	services, err := system.NewService()
+	services.Start(&wg)
+	services.Listen(&wg)
 
 	http.HandleFunc("/business", func(res http.ResponseWriter, req *http.Request) {
 		data, err := ioutil.ReadAll(req.Body)
 		if err != nil {
-			log.Println(err)
+			res.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(res, err.Error())
 		} else {
-			business <- string(data)
+			if services.State == system.BusinessReady {
+				business <- string(data)
+				fmt.Fprintln(res, "")
+			} else {
+				res.WriteHeader(http.StatusPreconditionFailed)
+				fmt.Fprintln(res, "Can't process reviews server state is ", services.State)
+			}
 		}
-		fmt.Fprintln(res, "")
 	})
 
 	http.HandleFunc("/reviews", func(res http.ResponseWriter, req *http.Request) {
 		data, err := ioutil.ReadAll(req.Body)
 		if err != nil {
-			log.Println(err)
+			res.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(res, err.Error())
 		} else {
-			reviews <- string(data)
+			if services.State == system.ReviewsReady {
+				reviews <- string(data)
+				fmt.Fprintln(res, "")
+			} else {
+				res.WriteHeader(http.StatusPreconditionFailed)
+				fmt.Fprintln(res, "Can't process reviews server state is ", services.State)
+			}
 		}
-		fmt.Fprintln(res, "")
 	})
 
 	http.HandleFunc("/report", func(res http.ResponseWriter, req *http.Request) {
-		if !services.Enabled() {
-			services.Send(api.WakeUp)
-			fmt.Fprintln(res, "Services not enabled")
-			return
+		if services.State == system.ReviewsReady {
+			res.Header().Add("Content-Type", "application/json")
+			encoder := json.NewEncoder(res)
+			encoder.SetIndent("", "\t")
+			err := encoder.Encode(report)
+			if err != nil {
+				fmt.Fprintf(res, err.Error())
+			} else {
+				fmt.Fprintf(res, "")
+			}
+		} else {
+			res.WriteHeader(http.StatusServiceUnavailable)
+			fmt.Fprintln(res, "System is initialing status ", services.State)
 		}
-		services.Send(api.Emit)
-		res.Header().Add("Content-Type", "application/json")
-		encoder := json.NewEncoder(res)
-		encoder.SetIndent("", "\t")
-		err := encoder.Encode(report)
-		log.Println(err)
 	})
 
 	http.HandleFunc("/control", func(res http.ResponseWriter, req *http.Request) {
@@ -75,7 +87,7 @@ func main() {
 		services.Send(signal)
 		fmt.Fprintln(res, "")
 	})
-
+	log.Println("Starting server")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 	wg.Wait()
 }

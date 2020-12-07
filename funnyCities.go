@@ -58,6 +58,10 @@ func main() {
 			for _, business := range ParseBusiness(bulk) {
 				businessCitiesDB[business.Business_id] = business.City
 			}
+			if len(bulk) == 0 {
+				log.Println("Done Loading Business")
+				controlOut <- api.BusinessEOF
+			}
 		case bulk := <-businessText:
 			for _, business := range bulk {
 				if strings.Contains(business.Text, "funny") {

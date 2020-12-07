@@ -102,13 +102,21 @@ func (l ByCounter) Less(i, j int) bool { return l[i].Int > l[j].Int }
 
 //////////////////////////////////////////////////
 type Signal struct {
-	Action string
-	Name   string
+	Action  string
+	Name    string
+	Counter int
 }
 
 var Quit = Signal{Action: "quit"}
 var Emit = Signal{Action: "emit"}
 var WakeUp = Signal{Action: "WakeUp"}
+
+func EOF(name string) Signal {
+	return Signal{Action: "eof", Name: name}
+}
+
+var ReviewsEOF = EOF("Reviews")
+var BusinessEOF = EOF("Business")
 
 const Five = 5.0
 

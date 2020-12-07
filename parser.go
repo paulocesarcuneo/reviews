@@ -65,7 +65,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("ok")
 	var wg sync.WaitGroup
 	threads := 4
 	wg.Add(threads)
@@ -82,12 +81,21 @@ func main() {
 				stars <- api.MapUserStars(reviews)
 				text <- api.MapUserText(reviews)
 				business <- api.MapBusinessText(reviews)
+				if len(bulk) == 0 {
+					// una sola instancia va a detectar el EOF, propagarlo hacia abajo
+					// y comunicandolo a las demas usando el canal de control
+					// como la queue de rabbit es unica no deberia haber una race condition
+					log.Println("Reviews EOF Reached")
+					controlOut <- api.ReviewsEOF
+					return
+				}
 			case signal := <-controlIn:
 				switch signal {
-				case api.Quit:
-					return
 				case api.WakeUp:
 					controlOut <- api.Signal{Action: "Join", Name: "parser"}
+				case api.ReviewsEOF:
+					log.Println("Done Parsing Reviews")
+					return
 				}
 			}
 		}
