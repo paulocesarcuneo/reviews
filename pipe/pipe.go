@@ -98,11 +98,11 @@ func ConsumeAsGob(exchange,
 		})
 }
 
-type Worker func(consumer BytesConsumer)
+type BytesPublisher func([]byte, string) error
+type Worker func(consumer BytesPublisher)
 
 func Publish(threads int,
 	exchangeName string,
-	routingKey string,
 	worker Worker) error {
 	utils.Pool(threads, func() {
 		ch, err := Conn.Channel()
@@ -121,7 +121,7 @@ func Publish(threads int,
 		if err != nil {
 			log.Println("Publish", err)
 		}
-		worker(func(bytes []byte) error {
+		worker(func(bytes []byte, routingKey string) error {
 			return ch.Publish(
 				exchangeName, // exchange
 				routingKey,   // routing key
@@ -137,23 +137,22 @@ func Publish(threads int,
 	return nil
 }
 
-type GobWorker func(Consumer)
+type Publisher func(interface{}, string) error
+type GobWorker func(Publisher)
 
 func PublishGob(
 	threads int,
 	exchangeName string,
-	routingKey string,
 	worker GobWorker) error {
 	return Publish(threads,
 		exchangeName,
-		routingKey,
-		func(byteconsumer BytesConsumer) {
-			worker(func(data interface{}) error {
+		func(byteconsumer BytesPublisher) {
+			worker(func(data interface{}, routingKey string) error {
 				bytes, err := encoding.GobEncoder(data)
 				if err != nil {
 					log.Fatal(err)
 				}
-				return byteconsumer(bytes)
+				return byteconsumer(bytes, routingKey)
 			})
 		})
 }
@@ -181,10 +180,9 @@ func NewStringPipe(exchange, queueName string) StringPipe {
 			data := make(chan string)
 			err := Publish(2,
 				exchange,
-				exchange,
-				func(consumer BytesConsumer) {
+				func(consumer BytesPublisher) {
 					for s := range data {
-						consumer([]byte(s))
+						consumer([]byte(s), exchange)
 					}
 				})
 			return data, err
@@ -214,10 +212,46 @@ func NewStringArrayPipe(exchange, queue string) StringArrayPipe {
 			data := make(chan []string)
 			err := PublishGob(2,
 				exchange,
-				exchange,
-				func(consumer Consumer) {
+				func(consumer Publisher) {
 					for i := range data {
-						consumer(i)
+						consumer(i, queue)
+					}
+				})
+			return data, err
+		},
+	}
+}
+
+type RoutedStringArray struct {
+	RoutingKey string
+	Data       []string
+}
+
+type RoutedStringArrayPipe struct {
+	In  func(string) (<-chan []string, io.Closer, error)
+	Out func() (chan<- RoutedStringArray, error)
+}
+
+func NewRoutedStringArrayPipe(exchange string) RoutedStringArrayPipe {
+	return RoutedStringArrayPipe{
+		In: func(queue string) (<-chan []string, io.Closer, error) {
+			data := make(chan []string)
+			ch, err := ConsumeAsGob(exchange,
+				queue,
+				exchange,
+				func(t interface{}) error {
+					data <- t.([]string)
+					return nil
+				})
+			return data, ch, err
+		},
+		Out: func() (chan<- RoutedStringArray, error) {
+			data := make(chan RoutedStringArray)
+			err := PublishGob(2,
+				exchange,
+				func(consumer Publisher) {
+					for i := range data {
+						consumer(i.Data, i.RoutingKey)
 					}
 				})
 			return data, err
@@ -228,7 +262,7 @@ func NewStringArrayPipe(exchange, queue string) StringArrayPipe {
 // Public Pipes
 var ReviewSource = NewStringPipe("reviews", "reviews")
 var BusinessSource = NewStringPipe("business", "business")
-var Users = NewStringArrayPipe("review-users", "review-users")
+var Users = NewRoutedStringArrayPipe("review-users")
 
 const ReviewDates = "review-dates"
 
@@ -251,10 +285,9 @@ var Dates = struct {
 		data := make(chan []time.Time)
 		err := PublishGob(2,
 			ReviewDates,
-			ReviewDates,
-			func(consumer Consumer) {
+			func(consumer Publisher) {
 				for i := range data {
-					consumer(i)
+					consumer(i, ReviewDates)
 				}
 			})
 		return data, err
@@ -282,10 +315,9 @@ var UserStars = struct {
 		data := make(chan []api.UserStars)
 		err := PublishGob(2,
 			ReviewUserStars,
-			ReviewUserStars,
-			func(consumer Consumer) {
+			func(consumer Publisher) {
 				for i := range data {
-					consumer(i)
+					consumer(i, ReviewUserStars)
 				}
 			})
 		return data, err
@@ -313,10 +345,9 @@ var BusinessText = struct {
 		data := make(chan []api.BusinessText)
 		err := PublishGob(2,
 			ReviewBusinessTexts,
-			ReviewBusinessTexts,
-			func(consumer Consumer) {
+			func(consumer Publisher) {
 				for i := range data {
-					consumer(i)
+					consumer(i, ReviewBusinessTexts)
 				}
 			})
 		return data, err
@@ -344,10 +375,9 @@ var UserText = struct {
 		data := make(chan []api.UserText)
 		err := PublishGob(2,
 			ReviewUserTexts,
-			ReviewUserTexts,
-			func(consumer Consumer) {
+			func(consumer Publisher) {
 				for i := range data {
-					consumer(i)
+					consumer(i, ReviewUserTexts)
 				}
 			})
 		return data, err
@@ -376,10 +406,9 @@ func NewCounterPipe(name string, queueName string) CounterPipe {
 			data := make(chan map[string]int)
 			err := PublishGob(2,
 				name,
-				name,
-				func(consumer Consumer) {
+				func(consumer Publisher) {
 					for i := range data {
-						consumer(i)
+						consumer(i, name)
 					}
 				})
 			return data, err
@@ -414,10 +443,9 @@ var SummaryTop10FunnyCities = struct {
 		data := make(chan []api.StringInt)
 		err := PublishGob(2,
 			Top10FunnyCities,
-			Top10FunnyCities,
-			func(consumer Consumer) {
+			func(consumer Publisher) {
 				for i := range data {
-					consumer(i)
+					consumer(i, Top10FunnyCities)
 				}
 			})
 		return data, err
@@ -451,10 +479,9 @@ var Control = ControlPipe{
 		data := make(chan api.Signal)
 		err := PublishGob(2,
 			control,
-			control,
-			func(consumer Consumer) {
+			func(consumer Publisher) {
 				for i := range data {
-					consumer(i)
+					consumer(i, control)
 				}
 			})
 		return data, err

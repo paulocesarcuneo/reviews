@@ -27,10 +27,14 @@ func ParseDate(s string) time.Time {
 	return date
 }
 
-func MapUsers(reviews []Review) []string {
-	result := []string{}
+func MapUsers(reviews []Review, shards int) [][]string {
+	result := [][]string{}
+	for i := 0; i < shards; i++ {
+		result = append(result, []string{})
+	}
 	for _, r := range reviews {
-		result = append(result, r.User_id)
+		shard := int(r.User_id[0]) % shards
+		result[shard] = append(result[shard], r.User_id)
 	}
 	return result
 }
@@ -104,9 +108,9 @@ func (l ByCounter) Less(i, j int) bool { return l[i].Int > l[j].Int }
 
 //////////////////////////////////////////////////
 type Signal struct {
-	Action  string
-	Name    string
-	Counter int
+	Action string
+	Name   string
+	Id     string
 }
 
 var Quit = Signal{Action: "quit"}

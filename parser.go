@@ -8,6 +8,7 @@ import (
 	"reviews/utils"
 	"strings"
 	"sync"
+	"time"
 )
 
 func ParseReview(data string) []api.Review {
@@ -32,12 +33,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	users, err := pipe.Users.Out()
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	dates, err := pipe.Dates.Out()
 	if err != nil {
 		log.Fatal(err)
@@ -69,6 +68,7 @@ func main() {
 	threads := 4
 	wg.Add(threads)
 	done := make(chan int, 1)
+	userShards := []string{}
 	utils.Pool(threads, func() {
 		defer wg.Done()
 		defer rClose.Close()
@@ -81,31 +81,52 @@ func main() {
 					done <- (count - 1)
 				}
 				return
-			case bulk := <-reviews:
+			case bulk, ok := <-reviews:
+				if !ok {
+					return
+				}
+				if len(bulk) == 0 {
+					log.Println("Reviews EOF Reached")
+					controlOut <- api.ReviewsEOF
+					continue
+				}
 				reviews := ParseReview(bulk)
-				users <- api.MapUsers(reviews)
+				for i, datum := range api.MapUsers(reviews, len(userShards)) {
+					if len(datum) != 0 {
+						users <- pipe.RoutedStringArray{Data: datum, RoutingKey: userShards[i]}
+					}
+				}
 				dates <- api.MapDate(reviews)
 				stars <- api.MapUserStars(reviews)
 				text <- api.MapUserText(reviews)
 				business <- api.MapBusinessText(reviews)
-				if len(bulk) == 0 {
-					// una sola instancia va a detectar el EOF, propagarlo hacia abajo
-					// y comunicandolo a las demas usando el canal de control
-					// como la queue de rabbit es unica no deberia haber una race condition
-					log.Println("Reviews EOF Reached")
-					controlOut <- api.ReviewsEOF
-				}
 			case signal := <-controlIn:
 				switch signal {
 				case api.WakeUp:
 					controlOut <- api.Signal{Action: "Join", Name: "parser"}
+					userShards = []string{}
 				case api.ReviewsEOF:
 					log.Println("Done Parsing Reviews")
 					done <- (threads - 1)
 					return
+				default:
+					if signal.Action == "Join" && signal.Name == "reviewsCounter" {
+						log.Println("Adding Review Counter Shards")
+						userShards = append(userShards, signal.Id)
+					}
 				}
 			}
 		}
 	})
 	wg.Wait()
+
+	for _, shard := range userShards {
+		users <- pipe.RoutedStringArray{Data: []string{}, RoutingKey: shard}
+	}
+	dates <- []time.Time{}
+	stars <- []api.UserStars{}
+	text <- []api.UserText{}
+	business <- []api.BusinessText{}
+
+	pipe.Conn.Close()
 }

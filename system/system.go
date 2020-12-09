@@ -33,9 +33,7 @@ var KnownServices = []string{"parser",
 	"sameText"}
 
 /*
-
 init -> business-ready -> review ready -> done
-
 */
 func NewService() (*Services, error) {
 	controlIn, cCloser, err := pipe.Control.In()
