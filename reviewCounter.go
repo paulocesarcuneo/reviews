@@ -41,6 +41,7 @@ func main() {
 	db := make(map[string]int)
 	eventCounter := 0
 	controlOut <- api.Signal{Action: "Join", Name: "reviewsCounter", Id: Id}
+	siblings := 0
 loop:
 	for {
 		select {
@@ -54,7 +55,7 @@ loop:
 				count := db[user]
 				db[user] = count + 1
 			}
-			if (eventCounter%api.SUMMARY_BULK_SIZE == 0 && len(db) != 0) || (len(bulk) == 0) {
+			if (eventCounter%(api.SUMMARY_BULK_SIZE/siblings) == 0 && len(db) != 0) || (len(bulk) == 0) {
 				log.Println(eventCounter)
 				summary <- utils.Copy(db)
 			}
@@ -70,7 +71,12 @@ loop:
 			case api.Quit:
 				return
 			case api.WakeUp:
+				siblings = 0
 				controlOut <- api.Signal{Action: "Join", Name: "reviewsCounter", Id: Id}
+			default:
+				if signal.Action == "Join" && signal.Name == "reviewsCounter" {
+					siblings++
+				}
 			}
 		}
 	}

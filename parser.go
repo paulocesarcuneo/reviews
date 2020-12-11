@@ -8,7 +8,6 @@ import (
 	"reviews/utils"
 	"strings"
 	"sync"
-	"time"
 )
 
 func ParseReview(data string) []api.Review {
@@ -85,14 +84,9 @@ func main() {
 				if !ok {
 					return
 				}
-				if len(bulk) == 0 {
-					log.Println("Reviews EOF Reached")
-					controlOut <- api.ReviewsEOF
-					continue
-				}
 				reviews := ParseReview(bulk)
 				for i, datum := range api.MapUsers(reviews, len(userShards)) {
-					if len(datum) != 0 {
+					if len(datum) != 0 || len(bulk) == 0 {
 						users <- pipe.RoutedStringArray{Data: datum, RoutingKey: userShards[i]}
 					}
 				}
@@ -100,6 +94,11 @@ func main() {
 				stars <- api.MapUserStars(reviews)
 				text <- api.MapUserText(reviews)
 				business <- api.MapBusinessText(reviews)
+				if len(bulk) == 0 {
+					log.Println("Reviews EOF Reached")
+					controlOut <- api.ReviewsEOF
+					continue
+				}
 			case signal := <-controlIn:
 				switch signal {
 				case api.WakeUp:
@@ -111,22 +110,12 @@ func main() {
 					return
 				default:
 					if signal.Action == "Join" && signal.Name == "reviewsCounter" {
-						log.Println("Adding Review Counter Shards")
 						userShards = append(userShards, signal.Id)
+						log.Println("Adding Review Counter Shards, ", userShards)
 					}
 				}
 			}
 		}
 	})
 	wg.Wait()
-
-	for _, shard := range userShards {
-		users <- pipe.RoutedStringArray{Data: []string{}, RoutingKey: shard}
-	}
-	dates <- []time.Time{}
-	stars <- []api.UserStars{}
-	text <- []api.UserText{}
-	business <- []api.BusinessText{}
-
-	pipe.Conn.Close()
 }

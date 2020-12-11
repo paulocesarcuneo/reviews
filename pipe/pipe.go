@@ -238,7 +238,7 @@ func NewRoutedStringArrayPipe(exchange string) RoutedStringArrayPipe {
 			data := make(chan []string)
 			ch, err := ConsumeAsGob(exchange,
 				queue,
-				exchange,
+				queue,
 				func(t interface{}) error {
 					data <- t.([]string)
 					return nil

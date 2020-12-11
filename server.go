@@ -37,13 +37,8 @@ func main() {
 			res.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(res, err.Error())
 		} else {
-			if services.State == system.BusinessReady {
-				business <- string(data)
-				fmt.Fprintln(res, "")
-			} else {
-				res.WriteHeader(http.StatusPreconditionFailed)
-				fmt.Fprintln(res, "Can't process reviews server state is ", services.State)
-			}
+			business <- string(data)
+			fmt.Fprintln(res, "")
 		}
 	})
 
@@ -53,30 +48,25 @@ func main() {
 			res.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(res, err.Error())
 		} else {
-			if services.State == system.ReviewsReady {
-				reviews <- string(data)
-				fmt.Fprintln(res, "")
-			} else {
-				res.WriteHeader(http.StatusPreconditionFailed)
-				fmt.Fprintln(res, "Can't process reviews server state is ", services.State)
-			}
+			reviews <- string(data)
+			fmt.Fprintln(res, "")
 		}
 	})
 
 	http.HandleFunc("/report", func(res http.ResponseWriter, req *http.Request) {
-		if services.State == system.ReviewsReady {
-			res.Header().Add("Content-Type", "application/json")
-			encoder := json.NewEncoder(res)
-			encoder.SetIndent("", "\t")
-			err := encoder.Encode(report)
-			if err != nil {
-				fmt.Fprintf(res, err.Error())
-			} else {
-				fmt.Fprintf(res, "")
-			}
+		if services.State == system.Initializing {
+			res.WriteHeader(http.StatusPreconditionFailed)
+			fmt.Fprintln(res, "Can't process reviews server state is ", services.State)
+			return
+		}
+		res.Header().Add("Content-Type", "application/json")
+		encoder := json.NewEncoder(res)
+		encoder.SetIndent("", "\t")
+		err := encoder.Encode(report)
+		if err != nil {
+			fmt.Fprintf(res, err.Error())
 		} else {
-			res.WriteHeader(http.StatusServiceUnavailable)
-			fmt.Fprintln(res, "System is initialing status ", services.State)
+			fmt.Fprintf(res, "")
 		}
 	})
 

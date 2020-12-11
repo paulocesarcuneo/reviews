@@ -61,26 +61,41 @@ func main() {
 
 	businessCitiesDB := make(map[string]string)
 	funnyBusinessDB := make(map[string]int)
-	end := 2
 	eventCounter := 0
-loop:
+
+loopBusiness:
 	for {
 		select {
 		case bulk, ok := <-business:
 			if !ok {
 				log.Println("Broken chan")
-				break loop
+				break loopBusiness
 			}
 			businessBulk := ParseBusiness(bulk)
 			if len(bulk) == 0 {
 				log.Println("Done Loading Business")
-				controlOut <- api.BusinessEOF
-				end--
+				break loopBusiness
 			} else {
 				for _, business := range businessBulk {
 					businessCitiesDB[business.Business_id] = business.City
 				}
 			}
+		case signal, ok := <-controlIn:
+			if !ok {
+				log.Println("Broken chan")
+				break loopBusiness
+			}
+			switch signal {
+			case api.Quit:
+				break loopBusiness
+			case api.WakeUp:
+				controlOut <- api.Signal{Action: "Join", Name: "funnyCities"}
+			}
+		}
+	}
+loop:
+	for {
+		select {
 		case bulk, ok := <-businessText:
 			if !ok {
 				log.Println("Broken chan")
@@ -93,14 +108,11 @@ loop:
 					funnyBusinessDB[business.Business] = count + 1
 				}
 			}
-			if len(bulk) == 0 {
-				end--
-			}
-			if (eventCounter%api.SUMMARY_BULK_SIZE == 0 && len(funnyBusinessDB) != 0) || end == 0 {
+			if (eventCounter%api.SUMMARY_BULK_SIZE == 0 && len(funnyBusinessDB) != 0) || len(bulk) == 0 {
 				log.Println(eventCounter)
 				summary <- updateCities(funnyBusinessDB, businessCitiesDB)
 			}
-			if end == 0 {
+			if len(bulk) == 0 {
 				break loop
 			}
 		case signal, ok := <-controlIn:
